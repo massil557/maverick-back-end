@@ -14,12 +14,13 @@ const authMiddleware = require('./middleware/authMiddleware');
 const jwt = require('jsonwebtoken');
 const generateProfilePicture = require('./generatImage');
 const mongoURI = 'mongodb://localhost:27017/maverick';
-
+const Magazine = require('./models/magazine')
 const multer = require('multer')
-
 
 app.use('/images', express.static('./images'));
 app.use('/uploads', express.static('uploads'));
+app.use(cors());
+
 mongoose.connect(mongoURI)
     .then(() => console.log('Connexion à MongoDB réussie !'))
     .catch(err => console.error('Erreur de connexion à MongoDB :', err));
@@ -27,7 +28,8 @@ mongoose.connect(mongoURI)
 app.listen(port, () => {
     console.log(`Serveur en cours d'exécution sur http://localhost:${port}`);
 });
-app.use(cors());
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -48,7 +50,7 @@ app.post('/client/signup', async (req, res) => {
         });
         const savedUser = await newUser.save();
         console.log(savedUser);
-        const user = { username: username, email: email }
+        const user = { username: username, email: email, role: role }
         const { accessToken, refreshToken } = await generateTokens(user);
         res.status(201).json({ accessToken, refreshToken, savedUser });
 
@@ -82,8 +84,8 @@ app.post('/login', async (req, res) => {
         if (!isAuth) {
             return res.status(401).send('wrong password');
         }
-        console.log(result.username, result.email);
-        const { accessToken, refreshToken } = await generateTokens({ username: result.username, email: result.email });
+        console.log(result.username, result.email, result.role);
+        const { accessToken, refreshToken } = await generateTokens({ username: result.username, email: result.email, role: result.role });
         res.status(201).json({ accessToken, refreshToken, result });
 
 
@@ -164,7 +166,7 @@ app.post('/token', async (req, res) => {
 
             // Générer un nouvel access token
             const accessToken = jwt.sign(
-                { username: user.username, email: user.email },
+                { username: user.username, email: user.email, role: user.role },
                 process.env.ACCESS_TOKEN_SECRET,
                 { expiresIn: '15m' } // Durée de validité de l'access token
             );
@@ -199,8 +201,8 @@ app.post('/api/products', upload.array('images', 10), (req, res) => {
         res.status(500).json({ error: 'Upload failed' });
     }
 });
-const Product = require('./models/product')
-const Clothes = require('./models/clothes')
+const { Product, NewProduct } = require('./models/product')
+const { Clothes, NewClothes } = require('./models/clothes')
 
 
 app.post('/api/products/details', async (req, res) => {
@@ -219,7 +221,7 @@ app.post('/api/products/details', async (req, res) => {
             checkedL,
             checkedXL } = req.body.updatedProduct;
 
-        const newClothes = new Clothes({
+        const newClothes = new NewClothes({
             idMagazine: idMagazine,
             name: name,
             brand: brand,
@@ -251,7 +253,7 @@ app.post('/api/products/details', async (req, res) => {
             category,
             gender,
             available } = req.body.updatedProduct
-        const newProduct = new Product({
+        const newProduct = new NewProduct({
             idMagazine: idMagazine,
             name: name,
             brand: brand,
@@ -300,5 +302,411 @@ app.get('/api/product/details/:id', async (req, res) => {
         res.status(200).json(product);
     } catch (error) {
         res.status(500).json({ message: "Server error" });
+    }
+});
+
+app.put('/api/user/favorite', async (req, res) => {
+    const { userId, newFavorite } = req.body
+    console.log({ userId, newFavorite })
+    try {
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $addToSet: { favorite: newFavorite } },
+            { new: true } // Returns the updated document
+        )
+        if (!updatedUser) {
+            return res.status(400).json({ message: "user not found" })
+        }
+        res.status(200).json({ message: "favorite updated" })
+    } catch (error) {
+        res.status(500).json({ message: "we had an error in favorite" })
+
+    }
+
+})
+app.put('/api/user/rFavorite', async (req, res) => {
+    const { userId, newFavorite } = req.body
+    console.log({ userId, newFavorite })
+    try {
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { $pull: { favorite: newFavorite } },
+            { new: true } // Returns the updated document
+        )
+        if (!updatedUser) {
+            return res.status(400).json({ message: "user not found" })
+        }
+        res.status(200).json({ message: "favorite updated" })
+    } catch (error) {
+        res.status(500).json({ message: "we had an error in favorite" })
+
+    }
+
+})
+app.get('/api/favoriteProduct/:id', async (req, res) => {
+    const userId = req.params.id;
+    const fProductsIds = await User.findById(userId, { favorite: 1, _id: 0 });
+    res.status(200).json(fProductsIds);
+
+})
+
+app.get('/api/favoriteProductBulk/:fProductsIds', async (req, res) => {
+    const userIds = JSON.parse(req.params.fProductsIds);
+    const fProducts = await Product.find({ _id: { $in: userIds } });
+    res.status(200).json({ fProducts });
+
+})
+
+app.get('/api/myProducts/:id', async (req, res) => {
+    const magazineId = req.params.id;
+    const MyProducts = await Product.find({
+        idMagazine: magazineId
+    });
+    res.status(200).json({ MyProducts });
+
+})
+
+
+app.put('/approveProduct/:id', authMiddleware, async (req, res) => {
+    console.log(req.user.role)
+    if (req.user.role !== 'admin') {
+        return res.status(406).json({ message: "only admins request" })
+    }
+
+    const productId = req.params.id
+    try {
+        const approvedProduct = await NewProduct.findOneAndDelete({
+            _id: productId
+        })
+        if (!approvedProduct) {
+            res.status(404).json({ message: 'product not found' })
+        }
+
+        const { idMagazine,
+            name,
+            brand,
+            price,
+            details,
+            category,
+            gender,
+            available,
+            checkedS,
+            checkedM,
+            checkedL,
+            checkedXL } = approvedProduct;
+
+
+        if (category === 'Fashion') {
+            const newClothes = new Clothes({
+                idMagazine: idMagazine,
+                name: name,
+                brand: brand,
+                price: price,
+                details: details,
+                category: category,
+                gender: gender,
+                available: available,
+                checkedS: checkedS,
+                checkedM: checkedM,
+                checkedL: checkedL,
+                checkedXL: checkedXL
+
+            })
+            await newClothes.save()
+            res.status(200).json({ message: "product approved" })
+
+        } else {
+            const newProduct = new Product({
+                idMagazine: idMagazine,
+                name: name,
+                brand: brand,
+                price: price,
+                details: details,
+                category: category,
+                gender: gender,
+                available: available,
+
+
+            })
+            await newProduct.save();
+            res.status(200).json({ message: `approved` })
+
+        }
+
+    } catch (error) {
+        res.status(500).json({ message: `server error` })
+
+    }
+
+})
+
+
+
+
+app.put('/rejectedProduct/:id', authMiddleware, async (req, res) => {
+    console.log(req.user.role)
+    if (req.user.role !== 'admin') {
+        return res.status(406).json({ message: "only admins request" })
+    }
+
+    const productId = req.params.id
+    try {
+        const RejectedProduct = await NewProduct.deleteOne({
+            _id: productId
+        })
+        if (!RejectedProduct) {
+            return res.status(404).json({ message: 'product not found' })
+        }
+        res.status(200).json({ message: 'product rejected' })
+    } catch (error) {
+        res.status(500).json({ message: `server error` })
+
+    }
+
+})
+
+
+app.get('/api/NewProducts', async (req, res) => {
+    try {
+        const newProducts = await NewProduct.find({})
+        if (!newProducts) {
+            return res.status(404).json({ message: 'there is no new products  ' })
+        }
+        res.status(200).json(newProducts)
+    } catch (error) {
+        return res.status(500).json({ message: `error at the server` })
+    }
+
+})
+
+app.get('/api/newProduct/details/:id', async (req, res) => {
+    const productId = req.params.id
+
+    try {
+        const newProduct = await NewProduct.findById(productId)
+        if (!newProduct) {
+            return res.status(404).json({ message: 'there is no new products  ' })
+        }
+        res.status(200).json(newProduct)
+    } catch (error) {
+        return res.status(500).json({ message: `error at the server` })
+    }
+
+})
+
+app.get('/api/newMagazines', async (req, res) => {
+    try {
+        const newMagazines = await MagazineInscription.find();
+        if (!newMagazines) {
+            return res.status(404).json({ message: "there is no new magazines" })
+        }
+        res.status(200).json(newMagazines)
+    } catch (error) {
+        res.status(500).json({ message: 'error in the server' })
+    }
+
+
+
+})
+
+app.get(
+    '/api/newMagazine/details/:id', async (req, res) => {
+        const magazineId = req.params.id
+        try {
+            const newMagazine = await MagazineInscription.findById(magazineId);
+            if (!newMagazine) {
+                return res.status(404).json({ message: "there is no new magazines" })
+            }
+            res.status(200).json(newMagazine)
+
+        } catch (error) {
+            res.status(500).json({ message: 'error in the server' })
+
+        }
+
+    })
+
+app.put('/approve/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(406).json({ message: "only admins request" })
+    }
+    const magId = req.params.id
+    try {
+        const newMag = await MagazineInscription.findOneAndDelete({ _id: magId });
+
+        if (!newMag) {
+            return res.status(404).json({ message: 'element not found' })
+        }
+        const {
+            username,
+            email,
+            password,
+            phone,
+            address,
+            sex,
+            role,
+            favorite,
+            product,
+            businessName,
+            accountHolderName,
+            bankAccountNumber,
+            bankRoutingNumber,
+            taxId
+        } = newMag
+
+        const newMagazine = new Magazine({
+            username: username,
+            email: email,
+            password: password,
+            phone: phone,
+            address: address,
+            sex: sex,
+            role: role,
+            favorite: favorite,
+            product: product,
+            businessName: businessName,
+            accountHolderName: accountHolderName,
+            bankAccountNumber: bankAccountNumber,
+            bankRoutingNumber: bankRoutingNumber,
+            taxId: taxId,
+            imagePath: generateProfilePicture(username)
+
+        })
+        console.log(newMagazine)
+        newMagazine.save()
+        res.status(200).json({ message: 'ok' })
+    } catch (error) {
+        res.status(500).json({ message: 'server error' })
+
+    }
+
+})
+
+
+app.put('/reject/:id', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(406).json({ message: "only admins request" })
+    }
+    const magId = req.params.id
+
+
+    try {
+        const newMag = await MagazineInscription.findOneAndDelete({ _id: magId });
+        if (!newMag) {
+            return res.status(404).json({ message: 'element not found' })
+        }
+        res.status(200).json({ message: 'deleted' })
+
+    } catch (error) {
+        res.status(500).json({ message: 'server error' })
+
+    }
+
+})
+
+
+app.post('/api/products/report/:productId', async (req, res) => {
+    try {
+        const { reason } = req.body;
+
+        const product = await Product.findById(req.params.productId);
+        if (!product) return res.status(404).json({ message: 'Product not found' });
+
+        product.reports.push({ userId: req.body.userId, reason });
+        product.signalCount += 1;
+        await product.save();
+
+        res.json({ message: 'Report submitted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+app.get('/api/products/reported', async (req, res) => {
+    try {
+        const reportedProducts = await Product.find({ signalCount: { $gt: 3 } });
+        res.json(reportedProducts);
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
+app.put('/api/products/report/:id', authMiddleware, async (req, res) => {
+    console.log(req.user.role)
+    if (req.user.role !== 'admin') {
+        return res.status(406).json({ message: "only admins request" })
+    }
+    const prodId = req.params.id
+    try {
+        const result = await Product.findByIdAndDelete(prodId)
+        console.log(result)
+        res.status(200).json({ message: 'product deleted' })
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+})
+app.post('/api/products/report/keep/:id', async (req, res) => {
+
+    try {
+
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ message: 'Product not found' });
+
+        product.signalCount = 0;
+        await product.save();
+
+        res.json({ message: 'product is kept' });
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+})
+
+// the comment section 
+
+app.post('/api/comments/:productId', async (req, res) => {
+    const { userId, text } = req.body
+    const productId = req.params.productId
+    try {
+        const product = await Product.findById(productId);
+        if (!product) return res.status(404).json({ message: 'Product not found' });
+
+        const comment = {
+            userId: userId,
+            text: text,
+            createdAt: new Date()
+        };
+
+        product.comments.push(comment);
+        await product.save();
+
+        res.status(201).json({ message: 'Comment added successfully', comment });
+
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error', error: error.message });
+    }
+
+})
+
+
+app.get('/api/comments/:productId', async (req, res) => {
+    const productId = req.params.productId;
+    try {
+        const product = await Product.findById(productId);
+        if (!product) return res.status(404).json({ message: 'Product not found' });
+        const commentsWithUserDetails = await Promise.all(
+            product.comments.map(async (comment) => {
+                const user = await User.findById(comment.userId, { username: 1, imagePath: 1 });
+                return {
+                    ...comment._doc,
+                    username: user?.username || 'Unknown User',
+                    imagePath: user?.imagePath || null
+                };
+            })
+        );
+        res.status(200).json(commentsWithUserDetails);
+        // res.status(200).json(product.comments);
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 });

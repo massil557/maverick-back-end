@@ -1,6 +1,6 @@
 
 const { mongoose } = require('mongoose');
-const ProductSchema = require('./product');
+const { Product, NewProduct } = require('./product');
 
 const ClothesSchema = new mongoose.Schema({
     checkedS: { type: Boolean, required: true },
@@ -9,4 +9,6 @@ const ClothesSchema = new mongoose.Schema({
     checkedXL: { type: Boolean, required: true },
 })
 
-module.exports = ProductSchema.discriminator('Clothes', ClothesSchema);
+const Clothes = Product.discriminator('Clothes', ClothesSchema);
+const NewClothes = NewProduct.discriminator('NewClothes', ClothesSchema)
+module.exports = { Clothes, NewClothes }

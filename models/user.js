@@ -12,6 +12,6 @@ const userSchema = new mongoose.Schema({
     imagePath: { type: [String], default: '' },
     createdAt: { type: Date, default: Date.now }
 
-}, { discriminatorKey: 'role' });
+});
 
 module.exports = mongoose.model('User', userSchema);
