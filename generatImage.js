@@ -34,7 +34,7 @@ const generateProfilePicture = (username) => {
         fs.mkdirSync(imagesDir);
     }
 
-    const fileName = `${username}_profile.png`;
+    const fileName = `${username}_${Date.now()}_profile.png`;
     const imagePath = path.resolve(imagesDir, fileName);
     const buffer = canvas.toBuffer('image/png');
     fs.writeFileSync(imagePath, buffer);

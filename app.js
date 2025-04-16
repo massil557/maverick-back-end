@@ -50,7 +50,7 @@ app.post('/client/signup', async (req, res) => {
         });
         const savedUser = await newUser.save();
         console.log(savedUser);
-        const user = { username: username, email: email, role: role }
+        const user = { username: username, email: email, role: accountType }
         const { accessToken, refreshToken } = await generateTokens(user);
         res.status(201).json({ accessToken, refreshToken, savedUser });
 
