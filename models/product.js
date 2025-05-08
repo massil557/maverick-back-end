@@ -18,6 +18,11 @@ const reportSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+const productRate = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    value: { type: Number, required: true },
+});
+
 
 const productSchema = new mongoose.Schema({
     idMagazine: { type: String, required: true },
@@ -26,6 +31,7 @@ const productSchema = new mongoose.Schema({
     price: { type: Number, required: true, min: 0.01 },
     details: { type: String, required: true },
     category: { type: String, enum: ['Fashion', 'Beauty', 'Fragrances', 'Accessories'], required: true },
+    subcategory: { type: String, enum: ['shirts', 'pants', 'suits', 'shoes', 'makeup', 'selfcare', 'fragrances', 'watches', 'hairclipper'], required: true },
     gender: { type: String, enum: ['men', 'women', 'both'], required: true },
     available: { type: [itemSchema], default: [], required: true },
     score: { type: Number, min: 0, default: 0 },
@@ -34,7 +40,8 @@ const productSchema = new mongoose.Schema({
     reports: { type: [reportSchema], default: [] },
     isOnSale: { type: Boolean, default: false },
     amount: { type: Number, min: 0, max: 0.99, default: 0 },
-    comments: { type: [commentSchema], default: [] }
+    comments: { type: [commentSchema], default: [] },
+    productRate: { type: [productRate], default: [] }
 });
 
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
-
+const cron = require('node-cron');
 const app = express();
 const port = 3000;
 const cors = require('cors');
@@ -16,10 +16,17 @@ const generateProfilePicture = require('./generatImage');
 const mongoURI = 'mongodb://localhost:27017/maverick';
 const Magazine = require('./models/magazine')
 const multer = require('multer')
+const fs = require('fs');
+const morgan = require('morgan');
+
+// 🔽 Créer un flux d'écriture vers un fichier
+// const accessLogStream = fs.createWriteStream('./logs/access.log', { flags: 'a' });
 
 app.use('/images', express.static('./images'));
 app.use('/uploads', express.static('uploads'));
 app.use(cors());
+
+// app.use(morgan('combined', { stream: accessLogStream }));
 
 mongoose.connect(mongoURI)
     .then(() => console.log('Connexion à MongoDB réussie !'))
@@ -214,6 +221,7 @@ app.post('/api/products/details', async (req, res) => {
             price,
             details,
             category,
+            subcategory,
             gender,
             available,
             checkedS,
@@ -228,6 +236,7 @@ app.post('/api/products/details', async (req, res) => {
             price: price,
             details: details,
             category: category,
+            subcategory: subcategory,
             gender: gender,
             available: available,
             checkedS: checkedS,
@@ -251,6 +260,7 @@ app.post('/api/products/details', async (req, res) => {
             price,
             details,
             category,
+            subcategory,
             gender,
             available } = req.body.updatedProduct
         const newProduct = new NewProduct({
@@ -260,6 +270,7 @@ app.post('/api/products/details', async (req, res) => {
             price: price,
             details: details,
             category: category,
+            subcategory: subcategory,
             gender: gender,
             available: available,
 
@@ -388,6 +399,7 @@ app.put('/approveProduct/:id', authMiddleware, async (req, res) => {
             price,
             details,
             category,
+            subcategory,
             gender,
             available,
             checkedS,
@@ -404,6 +416,7 @@ app.put('/approveProduct/:id', authMiddleware, async (req, res) => {
                 price: price,
                 details: details,
                 category: category,
+                subcategory: subcategory,
                 gender: gender,
                 available: available,
                 checkedS: checkedS,
@@ -423,6 +436,7 @@ app.put('/approveProduct/:id', authMiddleware, async (req, res) => {
                 price: price,
                 details: details,
                 category: category,
+                subcategory: subcategory,
                 gender: gender,
                 available: available,
 
@@ -708,5 +722,72 @@ app.get('/api/comments/:productId', async (req, res) => {
         // res.status(200).json(product.comments);
     } catch (error) {
         res.status(500).json({ message: 'Internal server error', error: error.message });
+    }
+});
+
+
+app.post('/rate-product/:productId', async (req, res) => {
+    const { productId } = req.params;
+    const { userId, value } = req.body;
+
+    if (!userId || typeof value !== 'number') {
+        return res.status(400).json({ error: 'userId and value are required.' });
+    }
+
+    try {
+        // 1. Try to update existing rating
+        const updateResult = await Product.updateOne(
+            { _id: productId, 'productRate.userId': userId },
+            { $set: { 'productRate.$.value': value } }
+        );
+
+        // 2. If no match, push new rating
+        if (updateResult.modifiedCount === 0) {
+            await Product.updateOne(
+                { _id: productId },
+                { $push: { productRate: { userId, value } } }
+            );
+        }
+
+        // 3. Re-fetch the product to get updated ratings
+        const updatedProduct = await Product.findById(productId);
+
+        const ratings = updatedProduct.productRate.map(rate => rate.value);
+        const avg = ratings.reduce((acc, curr) => acc + curr, 0) / ratings.length;
+        const flooredAvg = Math.floor(avg);
+
+        // 4. Save floored average to the product's rating field
+        updatedProduct.rating = flooredAvg;
+        await updatedProduct.save();
+
+        res.status(200).json({ message: 'Rating recorded.', newRating: flooredAvg });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+app.post('/add-to-cart/:productId', async (req, res) => {
+    const { productId } = req.params;
+
+    try {
+        // Increment score by 1 for the product
+        await Product.updateOne(
+            { _id: productId },
+            { $inc: { score: 1 } }
+        );
+        res.status(200).json({ message: 'Product added to cart, score incremented!' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+cron.schedule('0 0 * * 1', async () => {
+    try {
+        await Product.updateMany({}, { $set: { score: 0 } });
+        console.log('Weekly product scores reset.');
+    } catch (err) {
+        console.error('Failed to reset scores:', err);
     }
 });
