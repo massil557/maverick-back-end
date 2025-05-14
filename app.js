@@ -17,7 +17,11 @@ const mongoURI = 'mongodb://localhost:27017/maverick';
 const Magazine = require('./models/magazine')
 const multer = require('multer')
 const fs = require('fs');
-const morgan = require('morgan');
+const path = require('path');
+const axios = require('axios');
+
+
+
 
 // 🔽 Créer un flux d'écriture vers un fichier
 // const accessLogStream = fs.createWriteStream('./logs/access.log', { flags: 'a' });
@@ -791,3 +795,82 @@ cron.schedule('0 0 * * 1', async () => {
         console.error('Failed to reset scores:', err);
     }
 });
+
+
+app.get('/top-sellers', async (req, res) => {
+    try {
+        const topProducts = await Product.find()
+            .sort({ score: -1 })
+            .limit(6)
+            .select('name score');
+
+        res.json(topProducts);
+    } catch (error) {
+        console.error("Failed to fetch top sellers:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+
+app.get('/top-rated', async (req, res) => {
+    try {
+        const topRated = await Product.find()
+            .sort({ rating: -1 })
+            .limit(5)
+            .select('name rating');
+
+        res.json(topRated);
+    } catch (error) {
+        console.error("Failed to fetch top-rated products:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// GET /api/products/most-reported
+app.get('/most-reported', async (req, res) => {
+    try {
+        const mostReported = await Product.find()
+            .sort({ signalCount: -1 })
+            .limit(5)
+            .select('name signalCount');
+
+        res.json(mostReported);
+    } catch (error) {
+        console.error("Failed to fetch most-reported products:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+
+app.get('/stock', async (req, res) => {
+    try {
+        const products = await Product.find().select('name available');
+
+        const productStocks = products.map(product => {
+            const totalStock = product.available.reduce((acc, item) => acc + item.quantity, 0);
+            return { name: product.name, totalStock };
+        });
+
+        res.json(productStocks);
+    } catch (error) {
+        console.error("Failed to fetch stock data:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.get('/user-stats', async (req, res) => {
+    try {
+        const userCount = await User.countDocuments({ role: 'client' });
+        const magazineCount = await User.countDocuments({ role: 'magazine' });
+
+        res.json({
+            users: userCount,
+            magazines: magazineCount
+        });
+    } catch (err) {
+        console.error('Error fetching user stats:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+

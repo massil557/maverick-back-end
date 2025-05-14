@@ -34,6 +34,10 @@ const productSchema = new mongoose.Schema({
     subcategory: { type: String, enum: ['shirts', 'pants', 'suits', 'shoes', 'makeup', 'selfcare', 'fragrances', 'watches', 'hairclipper'], required: true },
     gender: { type: String, enum: ['men', 'women', 'both'], required: true },
     available: { type: [itemSchema], default: [], required: true },
+    embedding: {
+        type: [Number], // This will hold the vector from CLIP
+        default: []
+    },
     score: { type: Number, min: 0, default: 0 },
     rating: { type: Number, min: 0, max: 5, default: 0 },
     signalCount: { type: Number, min: 0, default: 0 },
