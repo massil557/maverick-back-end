@@ -16,9 +16,8 @@ const generateProfilePicture = require('./generatImage');
 const mongoURI = 'mongodb://localhost:27017/maverick';
 const Magazine = require('./models/magazine')
 const multer = require('multer')
-const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
+const GROQ_API_KEY = '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';
 
 
 
@@ -873,4 +872,500 @@ app.get('/user-stats', async (req, res) => {
     }
 });
 
+app.post('/chat', async (req, res) => {
+    const { message } = req.body;
+    const text = message.toLowerCase();
+    const query = {};
 
+    // Subcategories
+    const subcategories = ['shirts', 'pants', 'suits', 'shoes', 'makeup', 'selfcare', 'fragrances', 'watches', 'hairclipper'];
+    for (const sub of subcategories) {
+        if (text.includes(sub)) {
+            query.subcategory = sub;
+            break;
+        }
+    }
+
+    // Gender
+    if (text.includes('for men')) query.gender = 'men';
+    if (text.includes('for women')) query.gender = 'women';
+
+    // Color detection
+    const colors = ['red', 'black', 'white', 'blue', 'green', 'pink', 'yellow'];
+    const foundColor = colors.find(color => text.includes(color));
+    if (foundColor) {
+        query['available.color'] = foundColor;
+    }
+
+    // Price
+    const underMatch = text.match(/(under|less than|below)\s+\$?(\d+)/);
+    if (underMatch) query.price = { $lt: parseFloat(underMatch[2]) };
+
+    const overMatch = text.match(/(over|more than|above|greater than)\s+\$?(\d+)/);
+    if (overMatch) query.price = { $gt: parseFloat(overMatch[2]) };
+
+    try {
+        const products = await Product.find(query).limit(5);
+        if (!products.length) {
+            return res.json({ reply: "❌ No matching products found." });
+        }
+
+        const formatted = products.map(p => ({
+            name: p.name,
+            brand: p.brand,
+            price: p.price,
+            subcategory: p.subcategory,
+            color: p.available.map(a => a.color).join(', ')
+        }));
+
+        res.json({ reply: formatted });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ reply: "❌ Server error." });
+    }
+});
+
+// app.post('/AIS', async (req, res) => {
+//     const userMessage = req.body.message;
+
+//     const prompt = `
+//   You're a shopping chatbot. Your job is:
+//   1. Chat with the user nicely.
+//   2. Extract filters (color, category, subcategory, price.min/max) from their message.
+//   3. Return only ONE JSON object inside \`\`\`json ... \`\`\`.
+
+//   Example response:
+
+//   Sure! Here's what I found:
+
+//   \`\`\`json
+//   {
+//     "color": "black",
+//     "category": "Beauty",
+//     "subcategory": "makeup",
+//     "price": {
+//       "min": null,
+//       "max": 30
+//     }
+//   }
+//   \`\`\`
+
+//   User input: "${userMessage}"
+//   `;
+
+//     try {
+//         const aiRes = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+//             model: 'llama3-8b-8192',
+//             messages: [
+//                 { role: 'system', content: 'You help users shop by replying in natural language and giving filter JSON at the end.' },
+//                 { role: 'user', content: prompt }
+//             ],
+//             temperature: 0.3,
+//         }, {
+//             headers: {
+//                 Authorization: `Bearer ${GROQ_API_KEY}`,
+//                 'Content-Type': 'application/json',
+//             }
+//         });
+
+//         const content = aiRes.data.choices[0]?.message?.content;
+//         console.log("🧠 AI full message:\n", content);
+
+//         // Extract JSON block
+//         const match = content.match(/```json([\s\S]*?)```/);
+//         if (!match) {
+//             return res.status(400).json({ error: "Couldn't find valid JSON in AI reply", fullResponse: content });
+//         }
+
+//         let filters;
+//         try {
+//             filters = JSON.parse(match[1]);
+//         } catch (err) {
+//             return res.status(400).json({ error: "JSON parse failed", json: match[1] });
+//         }
+
+//         // Build MongoDB query
+//         const query = {
+//             ...(filters.color && { 'available.color': filters.color }),
+//             ...(filters.category && { category: filters.category }),
+//             ...(filters.subcategory && { subcategory: filters.subcategory }),
+//             ...(filters.price?.min != null || filters.price?.max != null) && {
+//                 price: {
+//                     ...(filters.price.min != null && { $gte: filters.price.min }),
+//                     ...(filters.price.max != null && { $lte: filters.price.max }),
+//                 }
+//             }
+//         };
+
+//         const products = await Product.find(query).limit(10);
+
+//         return res.json({
+//             success: true,
+//             filters,
+//             products,
+//             message: content // show AI's message in frontend if needed
+//         });
+
+//     } catch (error) {
+//         console.error("❌ AI or DB error:", error.response?.data || error.message);
+//         return res.status(500).json({ error: 'Server Error', details: error.message });
+//     }
+// });
+
+// app.post('/AIS', async (req, res) => {
+//     const userMessage = req.body.message;
+
+//     const prompt = `
+//   You're a shopping chatbot. Your job is:
+//   1. Chat with the user nicely.
+//   2. Extract filters (color, category, subcategory, price.min/max) from their message.
+//   3. Return only ONE JSON object inside \`\`\`json ... \`\`\`.
+
+//   Example response:
+
+//   Sure! Here's what I found:
+
+//   \`\`\`json
+//   {
+//     "color": "black",
+//     "category": "Beauty",
+//     "subcategory": "makeup",
+//     "price": {
+//       "min": null,
+//       "max": 30
+//     }
+//   }
+//   \`\`\`
+
+//   User input: "${userMessage}"
+//   `;
+
+//     try {
+//         const aiRes = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+//             model: 'llama3-8b-8192',
+//             messages: [
+//                 { role: 'system', content: 'You help users shop by replying in natural language and giving filter JSON at the end.' },
+//                 { role: 'user', content: prompt }
+//             ],
+//             temperature: 0.3,
+//         }, {
+//             headers: {
+//                 Authorization: `Bearer ${GROQ_API_KEY}`,
+//                 'Content-Type': 'application/json',
+//             }
+//         });
+
+//         const content = aiRes.data.choices[0]?.message?.content;
+//         console.log("🧠 AI full message:\n", content);
+
+//         // Extract JSON block
+//         const match = content.match(/```json([\s\S]*?)```/);
+//         if (!match) {
+//             return res.status(400).json({ error: "Couldn't find valid JSON in AI reply", fullResponse: content });
+//         }
+
+//         let filters;
+//         try {
+//             filters = JSON.parse(match[1]);
+//         } catch (err) {
+//             return res.status(400).json({ error: "JSON parse failed", json: match[1] });
+//         }
+
+//         // Build MongoDB query
+//         const query = {
+//             ...(filters.color && { 'available.color': filters.color }),
+//             ...(filters.category && { category: filters.category }),
+//             ...(filters.subcategory && { subcategory: filters.subcategory }),
+//             ...(filters.price?.min != null || filters.price?.max != null) && {
+//                 price: {
+//                     ...(filters.price.min != null && { $gte: filters.price.min }),
+//                     ...(filters.price.max != null && { $lte: filters.price.max }),
+//                 }
+//             }
+//         };
+
+//         const products = await Product.find(query).limit(10);
+
+//         return res.json({
+//             success: true,
+//             filters,
+//             products,
+//             message: content // send AI's full message to frontend if needed
+//         });
+
+//     } catch (error) {
+//         console.error("❌ AI or DB error:", error.response?.data || error.message);
+//         return res.status(500).json({ error: 'Server Error', details: error.message });
+//     }
+// });
+
+// app.post('/AIS', async (req, res) => {
+//     const userMessage = req.body.message;
+
+//     const prompt = `
+//   You're a shopping chatbot. Your job is:
+//   1. Chat with the user nicely.
+//   2. Extract filters (color, category, subcategory, price.min/max) from their message.
+//   3. Return only ONE JSON object inside \`\`\`json ... \`\`\`.
+
+//   Example response:
+
+//   Sure! Here's what I found:
+
+//   \`\`\`json
+//   {
+//     "color": "black",
+//     "category": "Beauty",
+//     "subcategory": "makeup",
+//     "price": {
+//       "min": null,
+//       "max": 30
+//     }
+//   }
+//   \`\`\`
+
+//   User input: "${userMessage}"
+//   `;
+
+//     try {
+//         const aiRes = await axios.post(
+//             'https://api.groq.com/openai/v1/chat/completions',
+//             {
+//                 model: 'llama3-8b-8192',
+//                 messages: [
+//                     { role: 'system', content: 'You help users shop by replying in natural language and giving filter JSON at the end.' },
+//                     { role: 'user', content: prompt },
+//                 ],
+//                 temperature: 0.3,
+//             },
+//             {
+//                 headers: {
+//                     Authorization: `Bearer ${GROQ_API_KEY}`,
+//                     'Content-Type': 'application/json',
+//                 },
+//             }
+//         );
+
+//         const content = aiRes.data.choices[0]?.message?.content;
+//         console.log('🧠 AI full message:\n', content);
+
+//         res.send(content);
+//         // Extract JSON block
+//         const match = content.match(/```json([\s\S]*?)```/);
+//         if (!match) {
+//             return res.status(400).json({ error: "Couldn't find valid JSON in AI reply", fullResponse: content });
+//         }
+
+//         let filters;
+//         try {
+//             filters = JSON.parse(match[1]);
+//         } catch (err) {
+//             return res.status(400).json({ error: 'JSON parse failed', json: match[1] });
+//         }
+
+//         // Return AI message + filters JSON (products will be fetched separately)
+//         return res.json({
+//             success: true,
+//             message: content,
+//             filters,
+//         });
+//     } catch (error) {
+//         console.error('❌ AI or server error:', error.response?.data || error.message);
+//         return res.status(500).json({ error: 'Server Error', details: error.message });
+//     }
+// });
+
+app.post('/AIS', async (req, res) => {
+    const userMessage = req.body.message;
+
+    const prompt = `
+You are a helpful shopping assistant chatbot.
+
+Your tasks:
+1. Chat naturally and nicely with the user.
+2. Extract any of the following fields from their message if mentioned or implied:
+   - name (product name)
+   - color
+   - brand
+   - category (one of: Fashion, Beauty, Fragrances, Accessories)
+   - subcategory (one of: shirts, pants, suits, shoes, makeup, selfcare, fragrances, watches, hairclipper)
+   - gender (one of: men, women)
+   - price (as an object with min and/or max)
+
+Output format:
+Always respond like this:
+"your chatbot reply|the extracted JSON (if any)"
+
+Use "|" as the separator.
+If no data is extracted, end with "|"
+
+Extraction rules:
+- Infer category, subcategory, or brand when possible (e.g., lipstick → makeup → Beauty)
+- Extract fields as soon as you detect them — even partial info is okay
+- If the product name implies other fields, extract them without asking more
+- Only include fields that are known or inferred
+- Keep responses short, friendly, and helpful
+
+Examples:
+
+User: hi
+Response: "Hi there! What can I help you shop for today?|"
+
+User: I want a black shirt
+Response: "Great choice! Let me find some black shirts for you.|{
+  \"color\": \"black\",
+  \"subcategory\": \"shirts\",
+  \"category\": \"Fashion\"
+}"
+
+User: got any selfcare under 30
+Response: "Yes! I have selfcare products under $30.|{
+  \"subcategory\": \"selfcare\",
+  \"category\": \"Beauty\",
+  \"price\": {
+    \"min\": null,
+    \"max\": 30
+  }
+}"
+
+  User input: "${userMessage}"
+  `;
+
+    try {
+        const aiRes = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama3-8b-8192',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You help users shop by replying in natural language and giving filter JSON at the end.',
+                    },
+                    { role: 'user', content: prompt },
+                ],
+                temperature: 0.3,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+
+        const content = aiRes.data.choices[0]?.message?.content;
+        console.log('🧠 AI full message:\n', content);
+        res.send(content)
+
+        // // Extract JSON block
+        // const match = content.match(/```json([\s\S]*?)```/);
+        // if (!match) {
+        //     return res.status(400).json({ error: "Couldn't find valid JSON in AI reply", fullResponse: content });
+        // }
+
+        // let filters;
+        // try {
+        //     filters = JSON.parse(match[1]);
+        // } catch (err) {
+        //     return res.status(400).json({ error: 'JSON parse failed', json: match[1] });
+        // }
+
+        // // Send one final response with the AI message and the extracted filters
+        // return res.json({
+        //     success: true,
+        //     message: content,
+        //     filters,
+        // });
+    } catch (error) {
+        console.error('❌ AI or server error:', error.response?.data || error.message);
+        return res.status(500).json({ error: 'Server Error', details: error.message });
+    }
+});
+
+// New endpoint to query products by filters from frontend
+app.post('/products/filter', async (req, res) => {
+    const filters = req.body.filters;
+
+    if (!filters) {
+        return res.status(400).json({ error: 'Filters missing in request body' });
+    }
+
+    try {
+        const query = {
+            ...(filters.color && { 'available.color': filters.color }),
+            ...(filters.category && { category: filters.category }),
+            ...(filters.subcategory && { subcategory: filters.subcategory }),
+            ...(filters.price?.min != null || filters.price?.max != null) && {
+                price: {
+                    ...(filters.price.min != null && { $gte: filters.price.min }),
+                    ...(filters.price.max != null && { $lte: filters.price.max }),
+                },
+            },
+        };
+
+        const products = await Product.find(query).limit(10);
+
+        return res.json({
+            success: true,
+            products,
+        });
+    } catch (err) {
+        console.error('❌ DB error:', err.message);
+        return res.status(500).json({ error: 'DB Error', details: err.message });
+    }
+});
+
+app.post('/search', async (req, res) => {
+    try {
+        const { subcategory, category, price, gender } = req.body;
+        const query = {};
+
+        // if (name) {
+        //     query.name = { $regex: new RegExp(name, 'i') }; // case-insensitive
+        // }
+
+        if (subcategory) {
+            query.subcategory = subcategory;
+        }
+
+        if (category) {
+            query.category = category;
+        }
+
+        if (gender) {
+            query.gender = gender;
+        }
+
+        if (price && (price.min != null || price.max != null)) {
+            query.price = {};
+            if (price.min != null) query.price.$gte = price.min;
+            if (price.max != null) query.price.$lte = price.max;
+        }
+
+        console.log('Search query:', query);
+        const results = await Product.find(query);
+        res.json(results);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error while searching for products.' });
+    }
+});
+
+
+
+app.get('/api/products/search', async (req, res) => {
+    const { q } = req.query;
+
+    if (!q) return res.status(400).json({ error: 'Query is required' });
+
+    try {
+        const results = await Product.find({
+            name: { $regex: q, $options: 'i' }, // case-insensitive match
+        }).limit(20);
+
+        res.json(results);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
