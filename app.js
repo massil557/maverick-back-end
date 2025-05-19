@@ -293,9 +293,18 @@ app.post('/api/products/details', async (req, res) => {
 })
 
 
-app.get('/api/getProduct', async (req, res) => {
+app.get('/api/getProduct/men', async (req, res) => {
     try {
-        const result = await Product.find({});
+        const result = await Product.find({ gender: 'men', isOnSale: 'false' });
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ message: "we had an error in the server" })
+    }
+
+})
+app.get('/api/getProduct/women', async (req, res) => {
+    try {
+        const result = await Product.find({ gender: 'women', isOnSale: false });
         res.status(200).json(result);
     } catch (error) {
         res.status(500).json({ message: "we had an error in the server" })

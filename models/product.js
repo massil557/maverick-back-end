@@ -31,7 +31,7 @@ const productSchema = new mongoose.Schema({
     price: { type: Number, required: true, min: 0.01 },
     details: { type: String, required: true },
     category: { type: String, enum: ['Fashion', 'Beauty', 'Fragrances', 'Accessories'], required: true },
-    subcategory: { type: String, enum: ['shirts', 'pants', 'suits', 'shoes', 'makeup', 'selfcare', 'fragrances', 'watches', 'hairclipper'], required: true },
+    subcategory: { type: String, enum: ['shirts', 'pants', 'suits', 'Dresses', 'shoes', 'makeup', 'selfcare', 'fragrances', 'watches', 'hairclipper'], required: true },
     gender: { type: String, enum: ['men', 'women', 'both'], required: true },
     available: { type: [itemSchema], default: [], required: true },
     embedding: {
